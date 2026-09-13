@@ -449,7 +449,8 @@ function LoginView({ onRequestOtp, onVerify, onNewAccount }) {
             {send.pending ? "جارٍ الإرسال…" : "إرسال رمز التحقق"}
           </button>
           <p className="login-note">الدخول متاح للمحلات المعتمدة من إدارة جملة</p>
-<button className="link-btn" onClick={onNewAccount}>مورد أو عميل جديد؟ أنشئ حسابك من هنا</button>
+<button className="link-btn" onClick={onNewAccount}>عميل جديد؟ أنشئ حسابك من هنا</button>
+
         </div>
       ) : (
         <div className="login-card">
