@@ -291,6 +291,7 @@ function PendingApprovalView({ onBack }) {
 
 function RegisterView({ onDone, onCancel }) {
   const [form, setForm] = useState({ name: "", phone: "", address: "" });
+  const [businessTypes, setBusinessTypes] = useState([""]);
   const [location, setLocation] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -300,6 +301,7 @@ function RegisterView({ onDone, onCancel }) {
     address: form.address.trim() || undefined,
     latitude: location?.lat,
     longitude: location?.lng,
+    businessTypes: businessTypes.map((t) => t.trim()).filter(Boolean),
   }));
 
   const valid = form.name.trim() && form.phone.replace(/\D/g, "").length >= 9;
