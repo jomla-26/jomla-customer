@@ -107,13 +107,14 @@ export default function JomlaCustomerApp() {
   }
 
   if (loading) return <FullScreenLoader />;
-  if (!actor) {
+    if (!actor) {
     return (
       <Shell>
-        <LoginView onRequestOtp={requestOtp} onVerify={verifyOtp} />
+        <AuthGate onRequestOtp={requestOtp} onVerify={verifyOtp} />
       </Shell>
     );
   }
+
 
   return (
     <Shell>
