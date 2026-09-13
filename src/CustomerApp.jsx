@@ -321,6 +321,24 @@ function RegisterView({ onDone, onCancel }) {
         <label className="field-label">العنوان</label>
         <input className="field-input" value={form.address} onChange={set("address")} />
 
+        <label className="field-label">نوع النشاط</label>
+        {businessTypes.map((t, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <input className="field-input" style={{ marginBottom: 0, flex: 1 }} value={t}
+              placeholder="مثال: مواد بناء"
+              onChange={(e) => setBusinessTypes((arr) => arr.map((v, idx) => idx === i ? e.target.value : v))} />
+            {businessTypes.length > 1 && (
+              <button type="button" className="btn-ghost" style={{ width: "auto", padding: "0 14px", marginBottom: 0 }}
+                onClick={() => setBusinessTypes((arr) => arr.filter((_, idx) => idx !== i))}>−</button>
+            )}
+            {i === businessTypes.length - 1 && (
+              <button type="button" className="btn-ghost" style={{ width: "auto", padding: "0 14px", marginBottom: 0 }}
+                onClick={() => setBusinessTypes((arr) => [...arr, ""])}>+</button>
+            )}
+          </div>
+        ))}
+
+
         <label className="field-label">تحديد الموقع على الخريطة</label>
         <RegisterLocationPicker value={location} onChange={setLocation} />
 
