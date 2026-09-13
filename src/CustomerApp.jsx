@@ -369,7 +369,7 @@ function RegisterLocationPicker({ value, onChange }) {
 }
 
 
-function LoginView({ onRequestOtp, onVerify }) {
+function LoginView({ onRequestOtp, onVerify, onNewAccount }) {
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
   const [digits, setDigits] = useState(["", "", "", ""]);
