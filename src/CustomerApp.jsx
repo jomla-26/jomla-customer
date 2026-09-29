@@ -1129,7 +1129,7 @@ function FavoritesView({ favorites, cart, onAdd, onChangeQty, onSetQty, onToggle
 
 // الحد الأدنى لطلب كل مورد لوحده داخل السلة — نفس الرقم المطبّق في الخادم
 // (orders.js)، معروض هنا مسبقًا عشان العميل يشوفه وهو يبني السلة، مش لما يترفض
-const MIN_SUPPLIER_ORDER = 1000;
+const MIN_SUPPLIER_ORDER = 10;
 
 function groupBySupplier(items) {
   const ids = [...new Set(items.map((i) => i.product.supplier_id))];
