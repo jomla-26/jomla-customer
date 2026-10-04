@@ -28,10 +28,10 @@ const LOGO_FULL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAArwAAAFYCAYAAAC
 
 const money = (n) => `${Number(n || 0).toFixed(2)} د.ل`;
 
-// مفتاح السلة: نفس الصنف بخيارين مختلفين (لون/مقاس) لازم يكون سطرين منفصلين في السلة
+// مفتاح السلة: نفس الصنف بنوعين مختلفين (لون/مقاس) لازم يكون سطرين منفصلين في السلة
 const cartKey = (p) => (p.variantId ? `${p.id}:${p.variantId}` : p.id);
 
-// لو الصنف عنده خيارات (ألوان/مقاسات/عبوات)، نفكّه لسطر مستقل لكل خيار —
+// لو الصنف عنده أنواع (ألوان/مقاسات/عبوات)، نفكّه لسطر مستقل لكل نوع —
 // كل واحد بسعره ومخزونه الخاص، وكأنه صنف قائم بذاته وقت التصفح والطلب
 function flattenForOrdering(products) {
   const out = [];
@@ -1119,7 +1119,7 @@ function ProductRow({ product: p, qty, cart, onAdd, onChangeQty, onSetQty, isFav
         {hasVariants ? (
           out ? <span className="out-label">—</span> : (
             <button className="add-btn" onClick={() => setSheet(true)}>
-              {variantQty > 0 ? `الخيارات (${variantQty})` : "اختر الخيارات"}
+              {variantQty > 0 ? `الأنواع (${variantQty})` : "اختر الأنواع"}
             </button>
           )
         ) : out ? <span className="out-label">—</span>
@@ -1144,7 +1144,7 @@ function ProductRow({ product: p, qty, cart, onAdd, onChangeQty, onSetQty, isFav
   );
 }
 
-// تفاصيل الصنف: كل خيار (لون/مقاس/عبوة) بسعره ومخزونه، ويقدر العميل يختار أكثر من خيار من نفس الصنف
+// تفاصيل الصنف: كل نوع (لون/مقاس/عبوة) بسعره ومخزونه، ويقدر العميل يختار أكثر من نوع من نفس الصنف
 function VariantSheet({ product: p, cart, onAdd, onChangeQty, onSetQty, onClose }) {
   const items = flattenForOrdering([p]);
   const [zoom, setZoom] = useState(null);
@@ -1159,7 +1159,7 @@ function VariantSheet({ product: p, cart, onAdd, onChangeQty, onSetQty, onClose 
         </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
           {p.image_url && <img src={p.image_url} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10 }} onClick={() => setZoom(p.image_url)} />}
-          <div className="product-meta">{p.supplier_name} · {p.unit}<br />اختر الخيارات اللي تبيها (تقدر تختار أكثر من خيار)</div>
+          <div className="product-meta">{p.supplier_name} · {p.unit}<br />اختر الأنواع اللي تبيها (تقدر تختار أكثر من نوع)</div>
         </div>
         {items.map((v) => {
           const k = cartKey(v);
