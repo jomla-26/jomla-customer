@@ -2149,11 +2149,11 @@ function DateRangeBar({ value, onChange }) {
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
         <label style={labelStyle}>
           من
-          <input type="date" value={from} max={to || undefined} onChange={(e) => set({ from: e.target.value })} style={inputStyle} />
+          <input type="date" lang="en-GB" dir="ltr" value={from} max={to || undefined} onChange={(e) => set({ from: e.target.value })} style={inputStyle} />
         </label>
         <label style={labelStyle}>
           إلى
-          <input type="date" value={to} min={from || undefined} onChange={(e) => set({ to: e.target.value })} style={inputStyle} />
+          <input type="date" lang="en-GB" dir="ltr" value={to} min={from || undefined} onChange={(e) => set({ to: e.target.value })} style={inputStyle} />
         </label>
         {(from || to) && (
           <button className="search-clear" aria-label="مسح الفترة" onClick={() => onChange({ from: "", to: "" })}><X size={15} /></button>
