@@ -172,6 +172,10 @@ export const api = {
   stockMovements: (params) => request("/catalog/stock-movements", { params }),
 
   /* الطلبيات */
+  /* السلة على الخادم + سجل البحث (مزامنة صامتة) */
+  cartGet: () => request("/carts/me"),
+  cartPut: (items) => request("/carts/me", { method: "PUT", body: { items } }),
+  searchLog: ({ query, resultsCount }) => request("/search-log", { method: "POST", body: { query, resultsCount } }),
   createOrder: (body) => request("/orders", { method: "POST", body }),
   orders: (params) => request("/orders", { params }),
   order: (id) => request(`/orders/${id}`),

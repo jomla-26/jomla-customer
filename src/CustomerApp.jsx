@@ -67,6 +67,21 @@ async function callApi(path, { method = "GET", body, signal } = {}) {
   return payload;
 }
 
+// بصمة السلة لمقارنة حالة الخادم بالمحلية (مرتّبة عشان ترتيب الأصناف ما يأثر)
+function cartSig(list) {
+  return JSON.stringify(
+    list
+      .map((e) => [e.productId, e.variantId || null, Number(e.qty)])
+      .sort((a, b) => (`${a[0]}|${a[1] || ""}` < `${b[0]}|${b[1] || ""}` ? -1 : 1))
+  );
+}
+function normalizeServerCart(items) {
+  return items
+    .filter((e) => e && typeof e.productId === "string" && Number(e.qty) > 0)
+    .map((e) => ({ productId: e.productId, variantId: e.variantId || null, qty: Number(e.qty) }))
+    .slice(0, 100);
+}
+
 // معرّف فريد لمحاولة إرسال الطلب — نفس المعرّف يُعاد عند إعادة المحاولة فيمنع الخادم تكرار الطلبية
 function newClientKey() {
   try {
@@ -235,9 +250,15 @@ export default function JomlaCustomerApp() {
   // ---- حفظ السلة في المتصفح (لكل حساب) + مراجعة الأسعار والتوفر لحظة التحميل ----
   const cartStorageKey = actor?.id ? `jomla_cart_v1:${actor.id}` : null;
   const cartHydrated = useRef(false);
+  const cartRef = useRef(cart);                  // آخر حالة للسلة (لتجنّب القيم القديمة داخل الدوال غير المتزامنة)
+  cartRef.current = cart;
+  const [syncReady, setSyncReady] = useState(false); // صار مسموح ندفع السلة للخادم (بعد فحص سلة الخادم)
+  const lastPushedSig = useRef(null);                // آخر حالة معروفة عند الخادم (لمنع الدفع المكرر)
 
   useEffect(() => {
     cartHydrated.current = false;
+    lastPushedSig.current = null;
+    setSyncReady(false);
     setCart({}); // تغيّر الحساب (أو خروج): ما نخلّي سلة حساب سابق في الذاكرة
     if (!cartStorageKey) return undefined;
 
@@ -250,17 +271,40 @@ export default function JomlaCustomerApp() {
       .filter((e) => e && e.product && typeof e.product.id === "string" && Number(e.qty) > 0)
       .slice(0, 100);
     let cancelled = false;
-    if (!saved.length) {
-      // نؤجّل التفعيل لما بعد هذه الدورة عشان ما يُكتب سلة قديمة بمفتاح الحساب الجديد
-      Promise.resolve().then(() => { if (!cancelled) cartHydrated.current = true; });
-      return () => { cancelled = true; };
-    }
-
     const toCart = (list) => {
       const next = {};
       for (const e of list) next[cartKey(e.product)] = { product: e.product, qty: Number(e.qty) };
       return next;
     };
+    if (!saved.length) {
+      // نؤجّل التفعيل لما بعد هذه الدورة عشان ما يُكتب سلة قديمة بمفتاح الحساب الجديد
+      Promise.resolve().then(() => { if (!cancelled) cartHydrated.current = true; });
+      // السلة المحلية فاضية: نجرّب نسترجع سلة محفوظة على الخادم (صامت — أي فشل يتجاهَل)
+      (async () => {
+        let serverItems = null;
+        try {
+          const r = await api.cartGet();
+          if (Array.isArray(r?.items)) serverItems = normalizeServerCart(r.items);
+        } catch { serverItems = null; }
+        if (cancelled) return;
+        if (!serverItems) { setSyncReady(true); return; }
+        if (!serverItems.length) { lastPushedSig.current = cartSig([]); setSyncReady(true); return; }
+        try {
+          const { items, unavailable } = await callApi("/orders/cart-items", { method: "POST", body: { items: serverItems } });
+          if (cancelled) return;
+          const stillEmpty = !Object.values(cartRef.current).some((i) => i.qty > 0);
+          if (stillEmpty && items?.length) {
+            // نحسب بصمة سلة الخادم عشان ما نرجّعها له مرة ثانية بلا داعي (تتغير فقط لو المراجعة عدّلت شي)
+            lastPushedSig.current = cartSig(serverItems);
+            setCart(toCart(items.map((f) => { const { qty, ...product } = f; return { product, qty }; })));
+            if (unavailable?.length) showToast(`${unavailable.length} صنف من سلتك ما عاد متوفر وتم حذفه`);
+          }
+        } catch { /* ما نقدر نراجع الأسعار الآن — ما نسترجع شي */ }
+        if (!cancelled) setSyncReady(true);
+      })();
+      return () => { cancelled = true; };
+    }
+
     callApi("/orders/cart-items", {
       method: "POST",
       body: { items: saved.map((e) => ({ productId: e.product.id, variantId: e.product.variantId || null, qty: Number(e.qty) })) },
@@ -276,6 +320,7 @@ export default function JomlaCustomerApp() {
           return { product: { ...(old?.product || {}), ...product }, qty };
         });
         cartHydrated.current = true;
+        setSyncReady(true); // السلة المحلية هي الأساس: تُدفع للخادم بعد هذا التحميل
         setCart((c) => ({ ...toCart(fresh), ...c }));
         if (unavailable?.length) showToast(`${unavailable.length} صنف من سلتك ما عاد متوفر وتم حذفه`);
         else if (changed) showToast("تم تحديث أسعار أو كميات بعض الأصناف في سلتك");
@@ -284,6 +329,7 @@ export default function JomlaCustomerApp() {
         if (cancelled) return;
         // تعذّر الاتصال: نبقي السلة المحفوظة كما هي — الخادم يراجعها عند إرسال الطلب
         cartHydrated.current = true;
+        setSyncReady(true);
         setCart((c) => ({ ...toCart(saved), ...c }));
       });
     return () => { cancelled = true; };
@@ -302,6 +348,24 @@ export default function JomlaCustomerApp() {
       else localStorage.removeItem(cartStorageKey);
     } catch { /* التخزين غير متاح — السلة تبقى بالذاكرة فقط */ }
   }, [cart, cartStorageKey]);
+
+  // ---- مزامنة السلة مع الخادم (صامتة، بعد ~1.5 ثانية من آخر تغيير؛ التخزين المحلي يبقى الأساس) ----
+  useEffect(() => {
+    if (!cartStorageKey || !syncReady || !cartHydrated.current) return undefined;
+    const list = Object.values(cart)
+      .filter((i) => i.qty > 0 && i.product && typeof i.product.id === "string")
+      .map(({ product, qty }) => ({ productId: product.id, variantId: product.variantId || null, qty: Number(qty) }))
+      .slice(0, 100);
+    const sig = cartSig(list);
+    if (sig === lastPushedSig.current) return undefined;
+    // سلة فاضية ولا نعرف شي عن الخادم (مثلًا فشل الجلب): ما نمسح سلته
+    if (!list.length && lastPushedSig.current === null) return undefined;
+    const t = setTimeout(() => {
+      lastPushedSig.current = sig;
+      try { api.cartPut(list).catch(() => {}); } catch { /* تجاهل */ }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [cart, cartStorageKey, syncReady]);
 
   const maxOf = (product) => {
     const n = Number(product?.stock_qty);
@@ -1554,6 +1618,7 @@ function SearchView({ sections, cart, onAdd, onChangeQty, onSetQty, favIds, onTo
   const [debounced, setDebounced] = useState("");
   const [recent, setRecent] = useState(readRecentSearches);
   const inputRef = useRef(null);
+  const loggedQueries = useRef(new Set()); // استعلامات سُجّلت في هذه الجلسة من الشاشة (مرة لكل استعلام)
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 350);
@@ -1563,11 +1628,22 @@ function SearchView({ sections, cart, onAdd, onChangeQty, onSetQty, favIds, onTo
   // البحث يمر على كل قسم مسموح به — الخادم يمنع ما عداها (نفس مسار /catalog/products?search)
   const { data: results, loading, error, reload } = useFetch(
     async (signal) => {
+      let failed = 0;
       const all = await Promise.all(
-        sections.map((s) => api.products({ sectionId: s.id, search: debounced }, signal).catch(() => []))
+        sections.map((s) => api.products({ sectionId: s.id, search: debounced }, signal).catch(() => { failed += 1; return []; }))
       );
       const seen = new Set();
-      return all.flat().filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+      const list = all.flat().filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+      // سجل البحث (للإدارة): مرة لكل استعلام مطبَّع، فقط لو البحث اكتمل فعلًا (مو ملغي ولا فشلت كل الأقسام)
+      try {
+        const q = debounced;
+        const norm = q.replace(/\s+/g, " ").toLowerCase();
+        if (!signal?.aborted && q.length >= 2 && sections.length > 0 && failed < sections.length && !loggedQueries.current.has(norm)) {
+          loggedQueries.current.add(norm);
+          Promise.resolve(api.searchLog({ query: q.slice(0, 100), resultsCount: list.length })).catch(() => {});
+        }
+      } catch { /* تجاهل */ }
+      return list;
     },
     [debounced, sections.length],
     { skip: !debounced }
