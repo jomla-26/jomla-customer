@@ -193,12 +193,13 @@ export default function JomlaCustomerApp() {
   // "كرر آخر طلبية" — آخر طلبية مو ملغاة، عشان زر إعادة الطلب في الصفحة الرئيسية
   const myOrders = useFetch(() => (actor ? api.orders() : Promise.resolve([])), [actor?.id]);
   const lastOrder = (myOrders.data ?? []).find((o) => o.status !== "cancelled" && o.status !== "draft");
-  const [reordering, setReordering] = useState(false);
-  const repeatLastOrder = useCallback(async () => {
-    if (!lastOrder) return;
-    setReordering(true);
+  const [reorderingId, setReorderingId] = useState(null);
+  const reordering = reorderingId !== null;
+  const repeatOrder = useCallback(async (orderId) => {
+    if (!orderId) return;
+    setReorderingId(orderId);
     try {
-      const { items, unavailable } = await api.reorderItems(lastOrder.id);
+      const { items, unavailable } = await api.reorderItems(orderId);
       if (items.length) {
         setCart((c) => {
           const next = { ...c };
@@ -214,15 +215,16 @@ export default function JomlaCustomerApp() {
       showToast(
         unavailable.length
           ? `تمت إضافة الأصناف المتوفرة — ${unavailable.length} صنف ما عاد متوفر وما انضافش`
-          : "تمت إضافة أصناف آخر طلبية للسلة"
+          : "تمت إضافة أصناف الطلبية للسلة بأسعارها الحالية"
       );
       if (items.length) setView("cart");
     } catch {
       showToast("تعذّر تكرار الطلبية، جرّب لاحقًا");
     } finally {
-      setReordering(false);
+      setReorderingId(null);
     }
-  }, [lastOrder]);
+  }, []);
+  const repeatLastOrder = useCallback(() => repeatOrder(lastOrder?.id), [repeatOrder, lastOrder]);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -508,11 +510,13 @@ export default function JomlaCustomerApp() {
             customerId={actor.id}
             onOpenOrder={(id) => { setSelectedOrderId(id); setView("orderDetail"); }}
             onShop={() => setView("home")}
+            onReorder={repeatOrder}
+            reorderingId={reorderingId}
           />
         )}
 
         {view === "orderDetail" && (
-          <OrderDetailView orderId={selectedOrderId} />
+          <OrderDetailView orderId={selectedOrderId} onReorder={repeatOrder} reorderingId={reorderingId} />
         )}
       </main>
 
@@ -2029,7 +2033,7 @@ function PayOption({ id, icon, label, value, onChange, disabled }) {
    كشف الحساب
 =================================================================== */
 
-function OrdersView({ customerId, onOpenOrder, onShop }) {
+function OrdersView({ customerId, onOpenOrder, onShop, onReorder, reorderingId }) {
   const [tab, setTab] = useState("orders");
   const [query, setQuery] = useState("");
 
@@ -2103,8 +2107,9 @@ function OrdersView({ customerId, onOpenOrder, onShop }) {
                 const remaining = Math.max(0, Number(o.grand_total) - Number(o.paid_amount));
                 const cancelled = o.status === "cancelled";
                 return (
+                  <div className="order-row-wrap" key={o.id}>
                   <button className={"order-row" + (cancelled ? " order-row-cancelled" : "")}
-                          key={o.id} onClick={() => onOpenOrder(o.id)}>
+                          onClick={() => onOpenOrder(o.id)}>
                     <div className="order-row-top">
                       <span className="order-row-id">{o.order_number}</span>
                       <span className={"status-pill" + (cancelled ? " status-pill-cancelled" : "")}>
@@ -2124,6 +2129,13 @@ function OrdersView({ customerId, onOpenOrder, onShop }) {
                       <span className="order-row-remaining">المتبقي: {money(remaining)}</span>
                     )}
                   </button>
+                  {o.status !== "draft" && onReorder && (
+                    <button className="order-reorder-btn" onClick={() => onReorder(o.id)} disabled={reorderingId != null}>
+                      <RotateCcw size={14} />
+                      <span>{reorderingId === o.id ? "جارٍ الإضافة…" : "إعادة الطلب"}</span>
+                    </button>
+                  )}
+                  </div>
                 );
               })}
             </div>
@@ -2412,7 +2424,7 @@ function MyVouchersPanel() {
   );
 }
 
-function OrderDetailView({ orderId }) {
+function OrderDetailView({ orderId, onReorder, reorderingId }) {
   const { data: order, loading, error, reload } = useFetch((signal) => api.order(orderId, signal), [orderId]);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -2440,6 +2452,13 @@ function OrderDetailView({ orderId }) {
       <button className="link-btn" style={{ marginBottom: 10 }} onClick={() => downloadCustomerInvoice(order)}>
         📄 عرض / تنزيل الفاتورة PDF
       </button>
+      {order.status !== "draft" && onReorder && (
+        <button className="repeat-order-btn" style={{ marginBottom: 12 }}
+                onClick={() => onReorder(order.id)} disabled={reorderingId != null}>
+          <RotateCcw size={15} />
+          <span>{reorderingId === order.id ? "جارٍ الإضافة…" : "إعادة هذه الطلبية"}</span>
+        </button>
+      )}
 
       {order.payment_method === "deferred" && order.deferred_due_date && (
         <div className="note-block">
@@ -2804,6 +2823,11 @@ function Style() {
       .search-clear{background:none;border:none;color:var(--ink-soft);cursor:pointer;display:flex}
 
       .ledger-list{display:flex;flex-direction:column;gap:8px}
+      .order-row-wrap{display:flex;flex-direction:column;gap:6px}
+      .order-reorder-btn{display:flex;align-items:center;justify-content:center;gap:6px;align-self:flex-start;
+        padding:7px 14px;border-radius:999px;border:1px solid var(--orange,#f26a1b);background:transparent;
+        color:var(--orange,#f26a1b);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+      .order-reorder-btn:disabled{opacity:0.5;cursor:default}
       .ledger-row{display:flex;align-items:center;gap:12px;width:100%;text-align:right;
         background:var(--paper-raised);border-radius:var(--card-radius);box-shadow:var(--shadow-card);
         border:none;padding:16px 14px;cursor:pointer;color:var(--ink)}
