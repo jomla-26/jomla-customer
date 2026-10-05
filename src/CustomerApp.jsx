@@ -2106,16 +2106,86 @@ function PayOption({ id, icon, label, value, onChange, disabled }) {
 }
 
 /* ===================================================================
+   اختيار الفترة (من / إلى)
+=================================================================== */
+
+// تاريخ اليوم بتوقيت طرابلس بصيغة YYYY-MM-DD
+function tripoliToday(offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Tripoli", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+function periodLabel(range) {
+  const f = range?.from, t = range?.to;
+  if (f && t) return `من ${f} إلى ${t}`;
+  if (f) return `من ${f}`;
+  if (t) return `حتى ${t}`;
+  return "كل الفترات";
+}
+
+function DateRangeBar({ value, onChange }) {
+  const { from = "", to = "" } = value || {};
+  const today = tripoliToday();
+  const set = (patch) => {
+    const next = { from, to, ...patch };
+    // لو تاريخ البداية بعد النهاية نعدّل الطرف الثاني عشان ما يرجعش خطأ 400
+    if (next.from && next.to && next.from > next.to) {
+      if (patch.from !== undefined) next.to = next.from; else next.from = next.to;
+    }
+    onChange(next);
+  };
+  const chips = [
+    { label: "اليوم", from: today, to: today },
+    { label: "7 أيام", from: tripoliToday(-6), to: today },
+    { label: "هذا الشهر", from: today.slice(0, 8) + "01", to: today },
+    { label: "الكل", from: "", to: "" },
+  ];
+  const active = (c) => c.from === from && c.to === to;
+  const inputStyle = { minHeight: 38, border: "1px solid var(--rule)", borderRadius: 10, background: "var(--paper-raised)",
+    color: "var(--ink)", padding: "4px 8px", fontFamily: "var(--font-body)", fontSize: 13, minWidth: 0, flex: 1 };
+  const labelStyle = { display: "flex", alignItems: "center", gap: 6, flex: 1, fontSize: 12, color: "var(--ink-soft)", minWidth: 0 };
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+        <label style={labelStyle}>
+          من
+          <input type="date" value={from} max={to || undefined} onChange={(e) => set({ from: e.target.value })} style={inputStyle} />
+        </label>
+        <label style={labelStyle}>
+          إلى
+          <input type="date" value={to} min={from || undefined} onChange={(e) => set({ to: e.target.value })} style={inputStyle} />
+        </label>
+        {(from || to) && (
+          <button className="search-clear" aria-label="مسح الفترة" onClick={() => onChange({ from: "", to: "" })}><X size={15} /></button>
+        )}
+      </div>
+      <div className="chip-row" style={{ marginBottom: 0, paddingBottom: 4 }}>
+        {chips.map((c) => (
+          <button key={c.label} className={"chip" + (active(c) ? " chip-active" : "")}
+            style={{ minHeight: 32, padding: "4px 12px" }} onClick={() => onChange({ from: c.from, to: c.to })}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ===================================================================
    كشف الحساب
 =================================================================== */
 
 function OrdersView({ customerId, onOpenOrder, onShop, onReorder, reorderingId }) {
   const [tab, setTab] = useState("orders");
   const [query, setQuery] = useState("");
+  const [range, setRange] = useState({ from: "", to: "" });
+  const hasRange = Boolean(range.from || range.to);
 
-  const orders = useFetch((signal) => api.orders(undefined, signal), []);
-  const ledger = useFetch((signal) => api.customerLedger(customerId, signal), [customerId]);
+  const orders = useFetch((signal) => api.orders({ from: range.from, to: range.to }, signal), [range.from, range.to]);
+  const ledger = useFetch((signal) => api.customerLedger(customerId, { from: range.from, to: range.to }, signal), [customerId, range.from, range.to]);
   const ledgerRows = ledger.data ?? [];
+  // صف "رصيد سابق" الافتراضي (يرجع من الـAPI لما يكون في تاريخ بداية) ما يتحسبش ضمن مدفوعات الفترة
+  const periodLedgerRows = ledgerRows.filter((e) => !e.is_opening);
   const currentBalance = ledgerRows.length ? Number(ledgerRows[ledgerRows.length - 1].balance) : 0;
 
   const filtered = (orders.data ?? []).filter(
@@ -2135,6 +2205,8 @@ function OrdersView({ customerId, onOpenOrder, onShop, onReorder, reorderingId }
     <div className="screen">
       <h2 className="section-heading">كشف الحساب</h2>
 
+      <DateRangeBar value={range} onChange={setRange} />
+
       <div className="chip-row">
         <button className={"chip" + (tab === "orders" ? " chip-active" : "")} onClick={() => setTab("orders")}>
           الطلبيات والمدفوعات
@@ -2152,16 +2224,16 @@ function OrdersView({ customerId, onOpenOrder, onShop, onReorder, reorderingId }
         : orders.error ? <ErrorState message={orders.error} onRetry={orders.reload} />
         : !orders.data?.length ? (
           <div className="center-state">
-            <Package size={26} /><p>لا توجد طلبات بعد</p>
-            <button className="btn-primary" onClick={onShop}>ابدأ التسوق</button>
+            <Package size={26} /><p>{hasRange ? "لا توجد طلبات في هذه الفترة" : "لا توجد طلبات بعد"}</p>
+            {!hasRange && <button className="btn-primary" onClick={onShop}>ابدأ التسوق</button>}
           </div>
         ) : (
           <>
             <div className="stat-grid">
               <div className="stat-box"><span>إجمالي المشتريات</span><b>{money(totals.total)}</b></div>
-              <div className="stat-box"><span>المدفوع</span><b>{ledger.loading || ledger.error ? money(totals.paid) : money(ledgerRows.reduce((a, e) => a + Number(e.credit || 0), 0))}</b></div>
+              <div className="stat-box"><span>المدفوع</span><b>{ledger.loading || ledger.error ? money(totals.paid) : money(periodLedgerRows.reduce((a, e) => a + Number(e.credit || 0), 0))}</b></div>
               {ledger.loading ? (
-                <div className="stat-box"><span>الرصيد</span><b>…</b></div>
+                <div className="stat-box"><span>{hasRange ? "الرصيد بنهاية الفترة" : "الرصيد"}</span><b>…</b></div>
               ) : currentBalance > 0 ? (
                 <div className="stat-box stat-box-debt"><span>المتبقي عليك</span><b>{money(currentBalance)}</b></div>
               ) : currentBalance < 0 ? (
@@ -2224,11 +2296,11 @@ function OrdersView({ customerId, onOpenOrder, onShop, onReorder, reorderingId }
           <div className="items-report">
             <button className="btn-ghost" style={{ marginBottom: 10 }}
               onClick={() => openLedgerStatement({
-                title: "كشف حساب", partyName: "حسابي", rows: ledger.data ?? [],
+                title: "كشف حساب", partyName: "حسابي", rows: ledger.data ?? [], range,
                 balanceLabel: currentBalance > 0 ? `المتبقي عليك: ${money(currentBalance)}` : currentBalance < 0 ? `المتبقي لك: ${money(Math.abs(currentBalance))}` : "الرصيد: متوازن",
               })}>🖨️ طباعة / PDF لكشف الحساب</button>
             {(ledger.data ?? []).map((e, i) => (
-              <div className="item-tx-row" key={i}>
+              <div className="item-tx-row" key={i} style={e.is_opening ? { fontWeight: 700, opacity: 0.85 } : undefined}>
                 <span className="item-tx-date">{String(e.entry_date).slice(0, 10)}</span>
                 <span className="item-tx-qty">{e.label}</span>
                 <span className="item-tx-price">
@@ -2236,11 +2308,11 @@ function OrdersView({ customerId, onOpenOrder, onShop, onReorder, reorderingId }
                 </span>
               </div>
             ))}
-            {!ledger.data?.length && <div className="center-state"><p>لا توجد حركة بعد</p></div>}
+            {!ledger.data?.length && <div className="center-state"><p>{hasRange ? "لا توجد حركة في هذه الفترة" : "لا توجد حركة بعد"}</p></div>}
           </div>
         )
       ) : (
-        <MyVouchersPanel />
+        <MyVouchersPanel range={range} />
       )}
     </div>
   );
@@ -2267,13 +2339,16 @@ function esc(s) {
 
 // طباعة/حفظ PDF لكشف حركة الحساب — النافذة تُفتح فورًا عند الضغط (قبل أي انتظار)
 // عشان المتصفح ما يحظرها كنافذة منبثقة
-function openLedgerStatement({ title, partyName, rows, balanceLabel }) {
+function openLedgerStatement({ title, partyName, rows, balanceLabel, range }) {
   const w = window.open("", "_blank");
   if (!w) return alert("يرجى السماح بالنوافذ المنبثقة لعرض الكشف.");
   const d = (r) => String(r.entry_date || "").slice(0, 10);
-  const totalDebit = rows.reduce((s, r) => s + Number(r.debit || 0), 0);
-  const totalCredit = rows.reduce((s, r) => s + Number(r.credit || 0), 0);
-  const body = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${d(r)}</td><td>${esc(r.label)}</td><td>${esc(r.reference || "—")}</td>
+  // صف الرصيد السابق يظهر في الجدول لكن ما يدخلش في إجمالي مدين/دائن الفترة
+  const totalDebit = rows.filter((r) => !r.is_opening).reduce((s, r) => s + Number(r.debit || 0), 0);
+  const totalCredit = rows.filter((r) => !r.is_opening).reduce((s, r) => s + Number(r.credit || 0), 0);
+  const periodText = periodLabel(range);
+  let seq = 0;
+  const body = rows.map((r) => `<tr${r.is_opening ? ' style="font-weight:700;background:#f4f5f9"' : ""}><td>${r.is_opening ? "—" : ++seq}</td><td>${d(r)}</td><td>${esc(r.label)}</td><td>${esc(r.reference || "—")}</td>
     <td>${esc(r.voucher_number || "—")}</td><td>${Number(r.debit) > 0 ? Number(r.debit).toFixed(2) : "—"}</td>
     <td>${Number(r.credit) > 0 ? Number(r.credit).toFixed(2) : "—"}</td><td>${Math.abs(Number(r.balance)).toFixed(2)}</td></tr>`).join("");
   w.document.open();
@@ -2293,7 +2368,7 @@ th{background:#181d2a;color:#fff;font-family:'Cairo',sans-serif}
 </style></head><body>
 <div class="pdf-toolbar"><button onclick="window.print()">🖨️ طباعة / حفظ PDF</button><button onclick="window.close()">✕ إغلاق</button></div>
 <div class="sheet"><img src="${LOGO_FULL}" alt="${COMPANY.name}" style="height:44px;display:block;margin-bottom:10px"/>
-<h2>${esc(title)}</h2><div class="meta">${esc(partyName)} · ${COMPANY.name} · ${new Date().toISOString().slice(0, 10)}</div>
+<h2>${esc(title)}</h2><div class="meta">${esc(partyName)} · ${COMPANY.name} · ${new Date().toISOString().slice(0, 10)}<br/>الفترة: ${esc(periodText)}</div>
 <table><thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>الفاتورة</th><th>الإيصال</th><th>مدين</th><th>دائن</th><th>الرصيد</th></tr></thead>
 <tbody>${body || '<tr><td colspan="8">لا توجد حركة</td></tr>'}</tbody></table>
 <div class="sum"><div>إجمالي المدين: ${totalDebit.toFixed(2)} د.ل</div><div>إجمالي الدائن: ${totalCredit.toFixed(2)} د.ل</div><div>${esc(balanceLabel)}</div></div>
@@ -2479,11 +2554,11 @@ function downloadVoucherPdf(id) {
   }).catch(() => { w.close(); alert("تعذّر تحميل بيانات الإيصال"); });
 }
 
-function MyVouchersPanel() {
-  const { data, loading, error, reload } = useFetch(() => api.myVouchers(), []);
+function MyVouchersPanel({ range = {} }) {
+  const { data, loading, error, reload } = useFetch((signal) => api.myVouchers({ from: range.from, to: range.to }, signal), [range.from, range.to]);
   if (loading) return <Spinner />;
   if (error) return <ErrorState message={error} onRetry={reload} />;
-  if (!data?.length) return <div className="center-state"><p>لا توجد سندات بعد</p></div>;
+  if (!data?.length) return <div className="center-state"><p>{range.from || range.to ? "لا توجد سندات في هذه الفترة" : "لا توجد سندات بعد"}</p></div>;
 
   return (
     <div className="items-report">
