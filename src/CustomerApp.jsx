@@ -2610,6 +2610,30 @@ function MyVouchersPanel({ range = {} }) {
   );
 }
 
+function ShortageProposals({ orderId, onDone }) {
+  const { data, reload } = useFetch((signal) => callApi(`/orders/${orderId}/shortage-proposals`, { signal }), [orderId]);
+  const respond = useAction((id, accept) => callApi(`/orders/shortages/${id}/respond`, { method: "POST", body: { accept } }));
+  if (!Array.isArray(data) || !data.length) return null;
+  return (
+    <div className="note-block" style={{ border: "2px solid #f59e0b", marginBottom: 12 }}>
+      <span className="note-label">⚠️ نحتاج موافقتك على نقص في طلبيتك</span>
+      {data.map((p) => (
+        <div key={p.id} style={{ marginTop: 10 }}>
+          <p>الصنف <b>{p.product_name}</b> المتوفر منه {Number(p.qty_confirmed || 0)} من {Number(p.qty_requested)}.</p>
+          <p>الاقتراح: <b>{p.proposed_text}</b>{p.substitute_name ? ` (${p.substitute_name})` : ""}</p>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="repeat-order-btn" disabled={respond.pending}
+              onClick={() => respond.run(p.id, true).then(() => { reload(); onDone(); }).catch(() => {})}>✅ موافق</button>
+            <button className="link-btn" disabled={respond.pending}
+              onClick={() => respond.run(p.id, false).then(() => { reload(); onDone(); }).catch(() => {})}>❌ ما نبيش</button>
+          </div>
+        </div>
+      ))}
+      {respond.error && <p className="field-error">{respond.error}</p>}
+    </div>
+  );
+}
+
 function OrderDetailView({ orderId, onReorder, reorderingId }) {
   const { data: order, loading, error, reload } = useFetch((signal) => api.order(orderId, signal), [orderId]);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -2655,6 +2679,8 @@ function OrderDetailView({ orderId, onReorder, reorderingId }) {
           </p>
         </div>
       )}
+
+      <ShortageProposals orderId={orderId} onDone={reload} />
 
       {order.suppliers.map((s) => (
         <div className="invoice-block" key={s.id}>
