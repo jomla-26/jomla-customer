@@ -2376,8 +2376,11 @@ th{background:#181d2a;color:#fff;font-family:'Cairo',sans-serif}
   w.document.close();
 }
 
+// السطر اللي المورد أكّد كميته صفر (غير متوفر) ما يظهر للعميل في الفاتورة
+const isZeroConfirmed = (i) => i.qty_confirmed != null && Number(i.qty_confirmed) === 0;
+
 function buildCustomerInvoiceHTML(order) {
-  const items = (order.suppliers ?? []).flatMap((s) => s.items ?? []);
+  const items = (order.suppliers ?? []).flatMap((s) => s.items ?? []).filter((i) => !isZeroConfirmed(i));
   const rows = items.map((i, n) => `<tr><td>${n + 1}</td><td>${esc(i.product_name)}</td><td>${esc(i.unit)}</td>
     <td>${i.qty_confirmed ?? i.qty_requested}</td><td>${Number(i.unit_price).toFixed(2)}</td>
     <td>${Number(i.line_total).toFixed(2)}</td></tr>`).join("");
@@ -2627,7 +2630,7 @@ function OrderDetailView({ orderId, onReorder, reorderingId }) {
             <span>{s.supplier_name}</span>
             <span className="status-pill">{PART_STATUS_LABELS[s.status] || statusLabel(s.status)}</span>
           </div>
-          {s.items.map((i) => (
+          {s.items.filter((i) => !isZeroConfirmed(i)).map((i) => (
             <div className="invoice-line" key={i.id}>
               <span className="invoice-line-name">
                 {i.product_name} <i>× {i.qty_confirmed ?? i.qty_requested}</i>
