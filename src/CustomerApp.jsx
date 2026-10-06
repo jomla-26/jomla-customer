@@ -441,6 +441,24 @@ export default function JomlaCustomerApp() {
     try { window.scrollTo(0, 0); } catch { /* بدون DOM */ }
   }, [view]);
 
+  // الضغط على إشعار يفتح الطلبية أو القسم أو المفضلة المعنية
+  useEffect(() => {
+    const h = async (e) => {
+      const n = e.detail || {};
+      if (n.order_id) { setSelectedOrderId(n.order_id); setView("orderDetail"); }
+      else if (n.section_id) {
+        try {
+          const all = await api.sections();
+          const s = (all ?? []).find((x) => x.id === n.section_id);
+          if (s) openSection(s); else setView("home");
+        } catch { setView("home"); }
+      } else if (n.template_code === "product.restocked") setView("favorites");
+      else setView("home");
+    };
+    window.addEventListener("jomla-notify-nav", h);
+    return () => window.removeEventListener("jomla-notify-nav", h);
+  });
+
   if (loading) return <FullScreenLoader />;
   if (!actor) {
     return (
@@ -942,6 +960,12 @@ function NotificationBell() {
   function markAll() {
     api.markAllNotificationsRead().then(reload).catch(() => {});
   }
+  // الضغط على الإشعار: نعلّمه مقروء ونقفل القائمة ونفتح المكان المعني (طلبية/قسم/شاشة) عبر حدث يلتقطه التطبيق
+  function openNotification(n) {
+    markRead(n);
+    setOpen(false);
+    window.dispatchEvent(new CustomEvent("jomla-notify-nav", { detail: n }));
+  }
 
   return (
     <div style={{ position: "relative" }}>
@@ -961,7 +985,7 @@ function NotificationBell() {
             <div className="notif-list">
               {data.notifications.map((n) => (
                 <div key={n.id} className={"notif-row" + (!n.in_app_read_at ? " notif-row-unread" : "")}
-                  onClick={() => markRead(n)}>
+                  onClick={() => openNotification(n)} style={{ cursor: "pointer" }}>
                   <span className="notif-title">{n.title}</span>
                   <span className="notif-body">{n.body}</span>
                   <span className="notif-time">{new Date(n.created_at).toLocaleString("ar")}</span>
@@ -1347,7 +1371,15 @@ function SectionView({ sectionId, supplierSectionId, parent, onSelectSub, suppli
   );
 
   // فلترة الموردين تكون دايمًا على مستوى القسم الرئيسي (حتى لو نتصفح تصنيف فرعي تحته)
-  const sectionSuppliers = (suppliers ?? []).filter((s) => s.section_id === (supplierSectionId || sectionId));
+  // وفي تصنيف فرعي: بس الموردين اللي عندهم أصناف داخل هذا التصنيف الفرعي بالذات.
+  // المورد ممكن يتكرر (أصناف بأكثر من تصنيف فرعي) فنجمّعه بمعرّفه
+  const rootId = supplierSectionId || sectionId;
+  const inSub = sectionId !== rootId;
+  const sectionSuppliers = [...new Map(
+    (suppliers ?? [])
+      .filter((s) => s.section_id === rootId && (!inSub || s.product_section_id === sectionId))
+      .map((s) => [s.id, s])
+  ).values()];
 
   return (
     <div className="section-screen">
