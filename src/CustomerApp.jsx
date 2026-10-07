@@ -1,3 +1,4 @@
+import { PasswordSteps, SetPasswordView, SecurityPanel } from "./PasswordPanels.jsx";
 import { pushState, enablePush, disablePush } from "./push.js";
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
@@ -171,7 +172,7 @@ const PART_STATUS_LABELS = {
 =================================================================== */
 
 export default function JomlaCustomerApp() {
-  const { actor, profile, loading, requestOtp, verifyOtp, logout } = useSession("customer");
+  const { actor, profile, loading, requestOtp, verifyOtp, logout, passwordLogin, codeLogin, recoverLogin, adoptSession, reloadProfile } = useSession("customer");
   const [view, setView] = useState("home");
   const [activeSection, setActiveSection] = useState(null);
   const [activeSectionName, setActiveSectionName] = useState("");
@@ -464,10 +465,11 @@ export default function JomlaCustomerApp() {
   if (!actor) {
     return (
       <Shell>
-        <AuthGate onRequestOtp={requestOtp} onVerify={verifyOtp} />
+        <AuthGate onRequestOtp={requestOtp} onVerify={verifyOtp} onPasswordLogin={passwordLogin} onCodeLogin={codeLogin} onRecover={recoverLogin} onAdopt={adoptSession} />
       </Shell>
     );
   }
+  if (profile?.needsPassword) return <Shell><SetPasswordView onSaved={reloadProfile} onLogout={logout} /></Shell>;
 
 
   const showBottomNav = ["home", "section", "favorites", "search", "cart", "orders", "account"].includes(view);
@@ -669,7 +671,7 @@ function BrandMark({ size = 24 }) {
    تسجيل الدخول
 =================================================================== */
 
-function AuthGate({ onRequestOtp, onVerify }) {
+function AuthGate(authProps) {
   const [mode, setMode] = useState("login"); // login | register | pending
 
   if (mode === "register") {
@@ -678,7 +680,7 @@ function AuthGate({ onRequestOtp, onVerify }) {
   if (mode === "pending") {
     return <PendingApprovalView onBack={() => setMode("login")} />;
   }
-  return <LoginView onRequestOtp={onRequestOtp} onVerify={onVerify} onNewAccount={() => setMode("register")} />;
+  return <LoginView {...authProps} onNewAccount={() => setMode("register")} />;
 }
 
 function PendingApprovalView({ onBack }) {
@@ -820,8 +822,8 @@ function phoneError(raw) {
   return "";
 }
 
-function LoginView({ onRequestOtp, onVerify, onNewAccount }) {
-  const [step, setStep] = useState("phone");
+function LoginView({ onRequestOtp, onVerify, onNewAccount, onPasswordLogin, onCodeLogin, onRecover, onAdopt }) {
+  const [step, setStep] = useState("password");
   const [phone, setPhone] = useState("");
   const [phoneErr, setPhoneErr] = useState("");
   const lastTried = useRef("");
@@ -888,7 +890,12 @@ function LoginView({ onRequestOtp, onVerify, onNewAccount }) {
       <LogoIntro width={250} />
       <p className="login-sub">منصة تجارة الجملة — سوق الجمعة، طرابلس</p>
 
-      {step === "phone" ? (
+      {["password", "forgot", "code", "recover"].includes(step) ? (
+        <PasswordSteps accountType="customer" step={step} setStep={setStep} phone={phone} setPhone={setPhone}
+          phoneError={phoneError} normalizePhone={normalizeLibyanPhone} phoneLabel="رقم الحساب المعتمد"
+          onPasswordLogin={onPasswordLogin} onCodeLogin={onCodeLogin} onRecover={onRecover} onAdopt={onAdopt}
+          allowRecovery={false} onNewAccount={onNewAccount} />
+      ) : step === "phone" ? (
         <div className="login-card">
           <label className="field-label">رقم الحساب المعتمد</label>
           <input
@@ -903,6 +910,7 @@ function LoginView({ onRequestOtp, onVerify, onNewAccount }) {
           </button>
           <p className="login-note">الدخول متاح للمحلات المعتمدة من إدارة جملة</p>
 <button className="link-btn" onClick={onNewAccount}>مستخدم جديد؟ أنشئ حسابك من هنا</button>
+          <button className="link-btn" onClick={() => setStep("password")}>عندي كلمة مرور — ادخل بها</button>
 
         </div>
       ) : (
@@ -1129,6 +1137,11 @@ function AccountView({ actor, credit, dark, onToggleDark, onFavorites, onLedger,
       <div className="account-row">
         <MapPin size={18} /><span>سوق الجمعة، 20 رمضان — طرابلس</span>
       </div>
+
+      <details style={{ margin: "14px 0" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700, padding: "10px 0" }}>كلمة المرور والأمان</summary>
+        <SecurityPanel onLoggedOut={onLogout} />
+      </details>
 
       <button className="account-logout" onClick={onLogout}>
         <LogOut size={18} /><span>تسجيل الخروج</span>
