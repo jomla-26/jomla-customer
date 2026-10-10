@@ -1418,6 +1418,12 @@ function SectionView({ sectionId, supplierSectionId, parent, onSelectSub, suppli
       .map((s) => [s.id, s])
   ).values()];
 
+  // لو اخترنا مورد معيّن: التصنيفات الفرعية تظهر بس اللي عند هذا المورد أصناف فيها
+  const supplierSubIds = supplierFilter === "all" ? null : new Set(
+    (suppliers ?? []).filter((s) => s.id === supplierFilter && s.section_id === rootId).map((s) => s.product_section_id)
+  );
+  const visibleSubs = (subs.data ?? []).filter((s) => !supplierSubIds || supplierSubIds.has(s.id) || sectionId === s.id);
+
   return (
     <div className="section-screen">
       {parent && (
@@ -1426,7 +1432,7 @@ function SectionView({ sectionId, supplierSectionId, parent, onSelectSub, suppli
             <button className={"chip" + (sectionId === parent.id ? " chip-active" : "")} onClick={() => onSelectSub(null)}>الكل</button>
             {subs.loading && !subs.data
               ? [0, 1, 2].map((i) => <span key={i} className="sk chip-sk" aria-hidden="true" />)
-              : (subs.data ?? []).map((s) => (
+              : visibleSubs.map((s) => (
                 <button key={s.id} className={"chip" + (sectionId === s.id ? " chip-active" : "")} onClick={() => onSelectSub(s)}>
                   {s.name}
                 </button>
@@ -1436,7 +1442,7 @@ function SectionView({ sectionId, supplierSectionId, parent, onSelectSub, suppli
       )}
 
       <div className="screen section-body">
-        {sectionSuppliers.length > 1 && (
+        {sectionSuppliers.length > 0 && (
           <div className="chip-row chip-row-sup">
             <button className={"chip chip-sm" + (supplierFilter === "all" ? " chip-active" : "")} onClick={() => setSupplierFilter("all")}>
               كل الموردين
