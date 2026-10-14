@@ -16,6 +16,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import LogoIntro from "./LogoIntro.jsx";
 import InstallPrompt from "./InstallPrompt.jsx";
+import TrackDriver from "./TrackDriver.jsx";
 
 const markerIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -2703,6 +2704,7 @@ function OrderDetailView({ orderId, onReorder, reorderingId }) {
       <p className="order-row-meta">
         {String(order.created_at).slice(0, 10)} · {PAYMENT_LABELS[order.payment_method]}
       </p>
+      {order.status === "out_for_delivery" && <TrackDriver orderId={orderId} />}
       <button className="link-btn" style={{ marginBottom: 10 }} onClick={() => downloadCustomerInvoice(order)}>
         📄 عرض / تنزيل الفاتورة PDF
       </button>

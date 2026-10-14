@@ -219,6 +219,7 @@ export const api = {
   createOrder: (body) => request("/orders", { method: "POST", body }),
   orders: (params, signal) => request("/orders", { params, signal }),
   order: (id) => request(`/orders/${id}`),
+  trackOrder: (id) => request(`/tracking/orders/${id}`),
   reorderItems: (id) => request(`/orders/${id}/reorder-items`),
   approveOrder: (id, body = {}) => request(`/orders/${id}/approve`, { method: "POST", body }),
   confirmOrderTransfer: (id, amount) => request(`/orders/${id}/confirm-transfer`, { method: "POST", body: { amount } }),
